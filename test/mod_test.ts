@@ -1,4 +1,3 @@
-import {} from "../src/mod.ts";
 import { assertEquals, assertThrows } from "./test_deps.ts";
 
 const { test } = Deno;

@@ -2,37 +2,68 @@ import { parse, parseYaml, path } from "./deps.ts";
 
 type StepType = {
   name: string;
-  description: string;
-  with: { [x: string]: number | string | boolean };
-  run: string;
-  lang: string;
+  description?: string;
+  with?: { [x: string]: string };
+  run?: string;
 };
 
 type JobType = {
   [x: string]: {
-    steps: StepType[];
+    steps?: StepType[];
   };
 };
 
 type GlobalVar = {
-  [x: string]: number | string | boolean | null;
-  pwd: string | null;
+  [x: string]: string;
+  pwd: string;
 };
 
 type YamlType = {
-  name: string | null;
-  var: GlobalVar;
-  jobs: JobType;
+  name?: string;
+  var?: GlobalVar;
+  jobs?: JobType;
 };
+
+type ExecOptions = Omit<Deno.RunOptions, "stdout" | "stderr">;
 
 const _cwd = Deno.cwd();
 const INPUT_FILE_NAME = "runner.yaml";
-const DEFAULT_YAML_CONTENT = {
-  name: null,
-  var: {
-    pwd: null,
-  },
-  jobs: {},
+
+const removeTrailingLineBreak = (str: string) => {
+  return str.replace(/^\\|\n$/, "").replace(/\"\n/, "");
+};
+
+const exec = async (cmd: string | string[] | ExecOptions) => {
+  let opts: Deno.RunOptions;
+
+  if (typeof cmd === "string") {
+    opts = {
+      cmd: cmd.split(" "),
+    };
+  } else if (Array.isArray(cmd)) {
+    opts = {
+      cmd,
+    };
+  } else {
+    opts = cmd;
+  }
+
+  opts.stdout = "piped";
+  opts.stderr = "piped";
+
+  const process = Deno.run(opts);
+  const decoder = new TextDecoder();
+  const { success } = await process.status();
+
+  if (!success) {
+    process.close();
+    throw new Error(
+      removeTrailingLineBreak(decoder.decode(await process.stderrOutput())) ||
+        "exec: failed to execute command"
+    );
+  }
+
+  return removeTrailingLineBreak(decoder.decode(await process.output()));
 };
 
 const parseYAMLFile = async (filePath: string) => {
@@ -40,33 +71,41 @@ const parseYAMLFile = async (filePath: string) => {
   return await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
 };
 
-const stepsProcessor = (steps: StepType[], globalVar: GlobalVar) => {
-  const _steps = steps.map((step: StepType) => {
-    step.with = Object.assign(step.with, globalVar);
-    step.run = step.run.replace(/(\$\w+)/g, (match: string) => {
-      return step.with[match.slice(1, match.length)].toString();
-    });
-    return step;
-  });
-  console.log("Steps Processor: ", _steps);
+// Processors
+const stepsProcessor = async (steps: StepType[] = [], globalVar: GlobalVar) => {
+  return (
+    await Promise.all([
+      ...steps.map(async (step: StepType) => {
+        return await exec(
+          step.run?.replace(/(\$\w+)/g, (match: string) => {
+            return { ...step.with, ...globalVar }[
+              match.slice(1, match.length)
+            ].toString();
+          }) || ""
+        );
+      }),
+    ])
+  ).join("");
 };
 
-const jobProcessor = ({
-  jobs,
-  var: globalVar,
-}: {
-  jobs: JobType;
-  var: GlobalVar;
-}) => {
+const jobProcessor = async (jobs: JobType = {}, globalVar: GlobalVar) => {
+  const jobOutput = [];
   for (const jobName of Object.keys(jobs)) {
-    stepsProcessor(jobs[jobName]["steps"], globalVar);
+    if (jobs[jobName])
+      jobOutput.push(await stepsProcessor(jobs[jobName].steps, globalVar));
   }
+  return jobOutput.join("");
 };
 
-const processor = (yaml: unknown) => {
-  const yc: YamlType = Object.assign(DEFAULT_YAML_CONTENT, yaml);
-  yc.var.pwd = !!yc.var.pwd ? path.join(_cwd, yc.var.pwd) : _cwd;
-  jobProcessor(yc);
+const processor = async (yaml: unknown) => {
+  let jobProcessorOutput;
+  const yc: YamlType = Object.assign({}, yaml);
+  yc.jobs = !!yc.jobs ? yc.jobs : {};
+  yc.var = !!yc.var
+    ? { ...yc.var, pwd: path.join(_cwd, yc.var.pwd) }
+    : { pwd: _cwd };
+  if (yc.jobs) jobProcessorOutput = await jobProcessor(yc.jobs, yc.var);
+  return jobProcessorOutput;
 };
 
 const main = async () => {
@@ -78,7 +117,9 @@ const main = async () => {
     INPUT_FILE_NAME;
   try {
     const yamlFileContent = await parseYAMLFile(path.join(_cwd, inputFile));
-    processor(yamlFileContent);
+    const processOutput = await processor(yamlFileContent);
+    console.log(processOutput);
+    Deno.exit();
   } catch (error) {
     console.log(error);
     Deno.exit(1);

@@ -1,7 +1,7 @@
 name: Test runner
 
 var:
-  pwd: /example
+  pwd: /test
 
 jobs:
   job1:
