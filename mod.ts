@@ -1,4 +1,4 @@
-import { parse, parseYaml, path } from "./deps.ts";
+import { parseYaml, path } from "./deps.ts";
 
 type StepType = {
   name: string;
@@ -25,9 +25,6 @@ type YamlType = {
 };
 
 type ExecOptions = Omit<Deno.RunOptions, "stdout" | "stderr">;
-
-const _cwd = Deno.cwd();
-const INPUT_FILE_NAME = "runner.yaml";
 
 const removeTrailingLineBreak = (str: string) => {
   return str.replace(/^\\|\n$/, "").replace(/\"\n/, "");
@@ -97,33 +94,21 @@ const jobProcessor = async (jobs: JobType = {}, globalVar: GlobalVar) => {
   return jobOutput.join("");
 };
 
-const processor = async (yaml: unknown) => {
+export const processor = async ({
+  pwd,
+  filename,
+}: {
+  pwd: string;
+  filename: string;
+}) => {
   let jobProcessorOutput;
-  const yc: YamlType = Object.assign({}, yaml);
-  yc.jobs = !!yc.jobs ? yc.jobs : {};
-  yc.var = !!yc.var
-    ? { ...yc.var, pwd: path.join(_cwd, yc.var.pwd) }
-    : { pwd: _cwd };
+  const yamlFileContent = await parseYAMLFile(path.join(pwd, filename));
+  const yc: YamlType = Object.assign({}, yamlFileContent);
+  yc.jobs = yc.jobs != null ? yc.jobs : {};
+  yc.var =
+    yc.var != null
+      ? { ...yc.var, pwd: path.join(pwd, yc.var.pwd) }
+      : { pwd: pwd };
   if (yc.jobs) jobProcessorOutput = await jobProcessor(yc.jobs, yc.var);
   return jobProcessorOutput;
 };
-
-const main = async () => {
-  const _args = parse(Deno.args);
-  const inputFile =
-    _args.i ||
-    _args.input ||
-    _args._.filter((inp) => inp.toString().endsWith(".yaml")).pop() ||
-    INPUT_FILE_NAME;
-  try {
-    const yamlFileContent = await parseYAMLFile(path.join(_cwd, inputFile));
-    const processOutput = await processor(yamlFileContent);
-    console.log(processOutput);
-    Deno.exit();
-  } catch (error) {
-    console.log(error);
-    Deno.exit(1);
-  }
-};
-
-await main();

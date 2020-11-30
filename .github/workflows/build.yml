@@ -17,9 +17,12 @@ jobs:
     - uses: actions/checkout@master
       
     - name: Setup Deno environment
-      uses: denolib/setup-deno@master
+      uses: denolib/setup-deno@v2.3.0
       with:
         deno-version: ${{ matrix.deno }}
+
+    - name: Run lint
+      run: deno lint --unstable
 
     - name: Run tests
       run: deno test
