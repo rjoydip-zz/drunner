@@ -14,10 +14,8 @@ jobs:
     - name: Setup Deno environment
       uses: denolib/setup-deno@v2.3.0
       with:
-        deno-version: ${{ matrix.deno }}
-
+        deno-version: v1.x
     - name: Run lint
       run: deno lint --unstable
-
     - name: Run tests
       run: deno test
