@@ -1,6 +1,7 @@
 name: Test runner
 
 var:
+  hello: world
   pwd: /test
 
 jobs:
@@ -28,3 +29,8 @@ jobs:
           version: v1.0.0
         run: |
           echo "Deploy version $version"
+
+      - name: Example
+        description: Run example sh file
+        run: |
+          sh  ./echo.sh

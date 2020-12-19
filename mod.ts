@@ -19,17 +19,19 @@ type GlobalVar = {
 };
 
 type YamlType = {
-  name?: string;
+  name: string | null;
   var?: GlobalVar;
-  jobs?: JobType;
+  jobs: JobType;
 };
 
 type ExecOptions = Omit<Deno.RunOptions, "stdout" | "stderr">;
 
+// Format standard output/error
 const removeTrailingLineBreak = (str: string) => {
   return str.replace(/^\\|\n$/, "").replace(/\"\n/, "");
 };
 
+// Execute command
 const exec = async (cmd: string | string[] | ExecOptions) => {
   let opts: Deno.RunOptions;
 
@@ -56,16 +58,17 @@ const exec = async (cmd: string | string[] | ExecOptions) => {
     process.close();
     throw new Error(
       removeTrailingLineBreak(decoder.decode(await process.stderrOutput())) ||
-        "exec: failed to execute command"
+        "exec: failed to execute command",
     );
   }
 
   return removeTrailingLineBreak(decoder.decode(await process.output()));
 };
 
+// Parse YAML file
 const parseYAMLFile = async (filePath: string) => {
   const yamlFile = await Deno.readFile(filePath);
-  return await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
+  return <YamlType> await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
 };
 
 // Processors
@@ -74,41 +77,83 @@ const stepsProcessor = async (steps: StepType[] = [], globalVar: GlobalVar) => {
     await Promise.all([
       ...steps.map(async (step: StepType) => {
         return await exec(
-          step.run?.replace(/(\$\w+)/g, (match: string) => {
-            return { ...step.with, ...globalVar }[
-              match.slice(1, match.length)
-            ].toString();
-          }) || ""
+          step.run
+            ?.replace(/(\$\w+)/g, (match: string) => {
+              return { ...step.with, ...globalVar }[
+                match.slice(1, match.length)
+              ].toString();
+            })
+            .replace(/(.\/|..\/)+(\w+\.\w+)/g, (match: string) => {
+              return path.join(globalVar.pwd, ` ${match}`.trim()); // spacing issue
+            }) || "",
         );
       }),
     ])
   ).join("");
 };
 
+// Job processor
 const jobProcessor = async (jobs: JobType = {}, globalVar: GlobalVar) => {
   const jobOutput = [];
   for (const jobName of Object.keys(jobs)) {
-    if (jobs[jobName])
+    if (jobs[jobName]) {
       jobOutput.push(await stepsProcessor(jobs[jobName].steps, globalVar));
+    }
   }
   return jobOutput.join("");
 };
 
+// Validate YAML file
+const validateYAMLFile = ({
+  content,
+}: {
+  content: YamlType;
+}): { isValid: boolean; error: string | null } => {
+  if (!content.name) {
+    return { isValid: false, error: "Please provide name" };
+  }
+  if (!content.jobs) {
+    return { isValid: false, error: "No job found" };
+  }
+  return { isValid: true, error: null };
+};
+
+// Processor
 export const processor = async ({
   pwd,
   filename,
 }: {
   pwd: string;
   filename: string;
-}) => {
-  let jobProcessorOutput;
-  const yamlFileContent = await parseYAMLFile(path.join(pwd, filename));
-  const yc: YamlType = Object.assign({}, yamlFileContent);
-  yc.jobs = yc.jobs != null ? yc.jobs : {};
-  yc.var =
-    yc.var != null
-      ? { ...yc.var, pwd: path.join(pwd, yc.var.pwd) }
-      : { pwd: pwd };
-  if (yc.jobs) jobProcessorOutput = await jobProcessor(yc.jobs, yc.var);
-  return jobProcessorOutput;
+}): Promise<{
+  output: string | null;
+  error: string | null;
+}> => {
+  const yamlFileContent: YamlType = await parseYAMLFile(
+    path.join(pwd, filename),
+  );
+  const yc = Object.assign(
+    {
+      var: {},
+    },
+    yamlFileContent,
+  );
+  const {
+    isValid: isValidYAMLFile,
+    error: yamlErrorMessage,
+  } = validateYAMLFile({
+    content: yamlFileContent,
+  });
+  if (isValidYAMLFile) {
+    yc.var = { ...yc.var, pwd: path.join(pwd, yc.var.pwd || "/") };
+    return {
+      output: await jobProcessor(yc.jobs, yc.var),
+      error: null,
+    };
+  } else {
+    return {
+      output: null,
+      error: yamlErrorMessage,
+    };
+  }
 };

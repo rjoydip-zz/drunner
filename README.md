@@ -13,3 +13,9 @@ deno install -f --name drunner https://raw.githubusercontent.com/rjoydip/drunner
 ```sh
 drunner runner.yaml
 ```
+
+## Run locally
+
+```sh
+deno run --allow-run --allow-read cli.ts test/runner.yaml
+```
