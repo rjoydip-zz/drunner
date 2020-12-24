@@ -11,8 +11,7 @@ jobs:
         description: Test description
         with:
           version: t1.0.0.0000
-        run: |
-          echo "Test version $version"
+        run: echo "Test version $version"
 
       - name: Build
         description: Build description
@@ -29,8 +28,11 @@ jobs:
           version: v1.0.0
         run: |
           echo "Deploy version $version"
+          echo "multiline"
 
       - name: Example
         description: Run example sh file
-        run: |
-          sh  ./echo.sh
+        run: sh ./echo.sh
+
+      - name: Example
+        description: Run example sh file

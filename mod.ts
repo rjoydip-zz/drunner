@@ -31,6 +31,14 @@ const removeTrailingLineBreak = (str: string) => {
   return str.replace(/^\\|\n$/, "").replace(/\"\n/, "");
 };
 
+// Utility: flatten array
+const deepFlatten = (arr: any[]): any[] => {
+  if (typeof Array.prototype.flat !== "undefined") return arr.flat(Infinity);
+  return [].concat(
+    ...arr.map((v: any) => (Array.isArray(v) ? deepFlatten(v) : v))
+  );
+};
+
 // Execute command
 const exec = async (cmd: string | string[] | ExecOptions) => {
   let opts: Deno.RunOptions;
@@ -58,7 +66,7 @@ const exec = async (cmd: string | string[] | ExecOptions) => {
     process.close();
     throw new Error(
       removeTrailingLineBreak(decoder.decode(await process.stderrOutput())) ||
-        "exec: failed to execute command",
+        "exec: failed to execute command"
     );
   }
 
@@ -68,28 +76,41 @@ const exec = async (cmd: string | string[] | ExecOptions) => {
 // Parse YAML file
 const parseYAMLFile = async (filePath: string) => {
   const yamlFile = await Deno.readFile(filePath);
-  return <YamlType> await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
+  return <YamlType>await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
 };
 
 // Processors
 const stepsProcessor = async (steps: StepType[] = [], globalVar: GlobalVar) => {
-  return (
-    await Promise.all([
-      ...steps.map(async (step: StepType) => {
-        return await exec(
-          step.run
-            ?.replace(/(\$\w+)/g, (match: string) => {
-              return { ...step.with, ...globalVar }[
-                match.slice(1, match.length)
-              ].toString();
-            })
-            .replace(/(.\/|..\/)+(\w+\.\w+)/g, (match: string) => {
-              return path.join(globalVar.pwd, ` ${match}`.trim()); // spacing issue
-            }) || "",
-        );
-      }),
-    ])
-  ).join("");
+  return await Promise.all([
+    ...steps.map(async (step: StepType) => {
+      return step.run?.toString() === undefined
+        ? ""
+        : Promise.all([
+            ...(await step.run
+              ?.toString()
+              .split("\n")
+              .filter((i) => !!i)
+              .map(async (run: string) => {
+                return await exec(
+                  run
+                    .toString()
+                    .replace(/(\$\w+)/g, (match: string) =>
+                      ({ ...step.with, ...globalVar }[
+                        match.slice(1, match.length)
+                      ].toString())
+                    )
+                    .replace(
+                      /(.\/|..\/)+(\w+\.\w+)/g,
+                      (match: string) =>
+                        ` ${path.join(globalVar.pwd, match.trim())}`
+                    )
+                    .trim()
+                    .concat("\n")
+                );
+              })),
+          ]);
+    }),
+  ]);
 };
 
 // Job processor
@@ -100,7 +121,7 @@ const jobProcessor = async (jobs: JobType = {}, globalVar: GlobalVar) => {
       jobOutput.push(await stepsProcessor(jobs[jobName].steps, globalVar));
     }
   }
-  return jobOutput.join("");
+  return deepFlatten(jobOutput).join("");
 };
 
 // Validate YAML file
@@ -130,13 +151,13 @@ export const processor = async ({
   error: string | null;
 }> => {
   const yamlFileContent: YamlType = await parseYAMLFile(
-    path.join(pwd, filename),
+    path.join(pwd, filename)
   );
   const yc = Object.assign(
     {
       var: {},
     },
-    yamlFileContent,
+    yamlFileContent
   );
   const {
     isValid: isValidYAMLFile,
