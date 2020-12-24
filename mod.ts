@@ -82,25 +82,24 @@ const stepsProcessor = async (steps: StepType[] = [], globalVar: GlobalVar) => {
               ?.toString()
               .split("\n")
               .filter((i) => !!i)
-              .map(
-                async (run: string) =>
-                  await exec(
-                    run
-                      .toString()
-                      .replace(/(\$\w+)/g, (match: string) =>
-                        ({ ...step.with, ...globalVar }[
-                          match.slice(1, match.length)
-                        ].toString())
-                      )
-                      .replace(
-                        /(.\/|..\/)+(\w+\.\w+)/g,
-                        (match: string) =>
-                          ` ${path.join(globalVar.pwd, match.trim())}`
-                      )
-                      .replace(/\s+/, " ")
-                      .concat("\n")
-                  )
-              )),
+              .map(async (run: string) => {
+                const executedRes = await exec(
+                  run
+                    .toString()
+                    .replace(/(\$\w+)/g, (match: string) =>
+                      ({ ...step.with, ...globalVar }[
+                        match.slice(1, match.length)
+                      ].toString())
+                    )
+                    .replace(
+                      /(.\/|..\/)+(\w+\.\w+)/g,
+                      (match: string) =>
+                        ` ${path.join(globalVar.pwd, match.trim())}`
+                    )
+                    .replace(/\s+/, " ")
+                );
+                return executedRes.concat("\n");
+              })),
           ]);
     }),
   ]);
@@ -110,11 +109,9 @@ const stepsProcessor = async (steps: StepType[] = [], globalVar: GlobalVar) => {
 const jobProcessor = async (jobs: JobType = {}, globalVar: GlobalVar) => {
   const jobOutput = [];
   for (const jobName of Object.keys(jobs)) {
-    if (jobs[jobName]) {
-      jobOutput.push(await stepsProcessor(jobs[jobName].steps, globalVar));
-    }
+    jobOutput.push(await stepsProcessor(jobs[jobName].steps, globalVar));
   }
-  return jobOutput.flat(Infinity).join("");
+  return jobOutput.flat(Infinity).join("").trim(); // triming last "\n"
 };
 
 // Validate YAML file

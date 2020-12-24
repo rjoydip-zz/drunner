@@ -36,4 +36,4 @@ jobs:
 
       - name: Deno version
         description: Run example sh file
-        # run: deno --version
+        run: deno --version
