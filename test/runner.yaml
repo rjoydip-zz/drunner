@@ -30,9 +30,10 @@ jobs:
           echo "Deploy version $version"
           echo "multiline"
 
-      - name: Example
+      - name: Echo
         description: Run example sh file
-        run: sh ./echo.sh
+        run: sh  ./echo.sh
 
-      - name: Example
+      - name: Deno version
         description: Run example sh file
+        # run: deno --version

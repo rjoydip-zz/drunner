@@ -31,14 +31,6 @@ const removeTrailingLineBreak = (str: string) => {
   return str.replace(/^\\|\n$/, "").replace(/\"\n/, "");
 };
 
-// Utility: flatten array
-const deepFlatten = (arr: any[]): any[] => {
-  if (typeof Array.prototype.flat !== "undefined") return arr.flat(Infinity);
-  return [].concat(
-    ...arr.map((v: any) => (Array.isArray(v) ? deepFlatten(v) : v))
-  );
-};
-
 // Execute command
 const exec = async (cmd: string | string[] | ExecOptions) => {
   let opts: Deno.RunOptions;
@@ -84,30 +76,31 @@ const stepsProcessor = async (steps: StepType[] = [], globalVar: GlobalVar) => {
   return await Promise.all([
     ...steps.map(async (step: StepType) => {
       return step.run?.toString() === undefined
-        ? ""
+        ? Promise.resolve([""])
         : Promise.all([
             ...(await step.run
               ?.toString()
               .split("\n")
               .filter((i) => !!i)
-              .map(async (run: string) => {
-                return await exec(
-                  run
-                    .toString()
-                    .replace(/(\$\w+)/g, (match: string) =>
-                      ({ ...step.with, ...globalVar }[
-                        match.slice(1, match.length)
-                      ].toString())
-                    )
-                    .replace(
-                      /(.\/|..\/)+(\w+\.\w+)/g,
-                      (match: string) =>
-                        ` ${path.join(globalVar.pwd, match.trim())}`
-                    )
-                    .trim()
-                    .concat("\n")
-                );
-              })),
+              .map(
+                async (run: string) =>
+                  await exec(
+                    run
+                      .toString()
+                      .replace(/(\$\w+)/g, (match: string) =>
+                        ({ ...step.with, ...globalVar }[
+                          match.slice(1, match.length)
+                        ].toString())
+                      )
+                      .replace(
+                        /(.\/|..\/)+(\w+\.\w+)/g,
+                        (match: string) =>
+                          ` ${path.join(globalVar.pwd, match.trim())}`
+                      )
+                      .replace(/\s+/, " ")
+                      .concat("\n")
+                  )
+              )),
           ]);
     }),
   ]);
@@ -121,7 +114,7 @@ const jobProcessor = async (jobs: JobType = {}, globalVar: GlobalVar) => {
       jobOutput.push(await stepsProcessor(jobs[jobName].steps, globalVar));
     }
   }
-  return deepFlatten(jobOutput).join("");
+  return jobOutput.flat(Infinity).join("");
 };
 
 // Validate YAML file
