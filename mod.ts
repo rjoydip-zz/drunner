@@ -13,14 +13,14 @@ type JobType = {
   };
 };
 
-type GlobalVar = {
+type Variables = {
   [x: string]: string;
   pwd: string;
 };
 
 type YamlType = {
   name: string | null;
-  var?: GlobalVar;
+  variables?: Variables;
   jobs: JobType;
 };
 
@@ -58,7 +58,7 @@ const exec = async (cmd: string | string[] | ExecOptions) => {
     process.close();
     throw new Error(
       removeTrailingLineBreak(decoder.decode(await process.stderrOutput())) ||
-        "exec: failed to execute command"
+        "exec: failed to execute command",
     );
   }
 
@@ -68,45 +68,46 @@ const exec = async (cmd: string | string[] | ExecOptions) => {
 // Parse YAML file
 const parseYAMLFile = async (filePath: string) => {
   const yamlFile = await Deno.readFile(filePath);
-  return <YamlType>await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
+  return <YamlType> await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
 };
 
 // Processors
-const stepsProcessor = async (steps: StepType[] = [], globalVar: GlobalVar) => {
+const stepsProcessor = async (steps: StepType[] = [], globalVar: Variables) => {
   return await Promise.all([
     ...steps.map(async (step: StepType) => {
       return step.run?.toString() === undefined
         ? Promise.resolve([""])
         : Promise.all([
-            ...(await step.run
-              ?.toString()
-              .split("\n")
-              .filter((i) => !!i)
-              .map(async (run: string) => {
-                const executedRes = await exec(
-                  run
-                    .toString()
-                    .replace(/(\$\w+)/g, (match: string) =>
-                      ({ ...step.with, ...globalVar }[
-                        match.slice(1, match.length)
-                      ].toString())
-                    )
-                    .replace(
-                      /(.\/|..\/)+(\w+\.\w+)/g,
-                      (match: string) =>
-                        ` ${path.join(globalVar.pwd, match.trim())}`
-                    )
-                    .replace(/\s+/, " ")
-                );
-                return executedRes.concat("\n");
-              })),
-          ]);
+          ...(await step.run
+            ?.toString()
+            .split("\n")
+            .filter((i) => !!i)
+            .map(async (run: string) => {
+              const executedRes = await exec(
+                run
+                  .toString()
+                  .replace(
+                    /(\$\w+)/g,
+                    (match: string) => ({ ...step.with, ...globalVar }[
+                      match.slice(1, match.length)
+                    ].toString()),
+                  )
+                  .replace(
+                    /(.\/|..\/)+(\w+\.\w+)/g,
+                    (match: string) =>
+                      ` ${path.join(globalVar.pwd, match.trim())}`,
+                  )
+                  .replace(/\s+/, " "),
+              );
+              return executedRes.concat("\n");
+            })),
+        ]);
     }),
   ]);
 };
 
 // Job processor
-const jobProcessor = async (jobs: JobType = {}, globalVar: GlobalVar) => {
+const jobProcessor = async (jobs: JobType = {}, globalVar: Variables) => {
   const jobOutput = [];
   for (const jobName of Object.keys(jobs)) {
     jobOutput.push(await stepsProcessor(jobs[jobName].steps, globalVar));
@@ -141,13 +142,13 @@ export const processor = async ({
   error: string | null;
 }> => {
   const yamlFileContent: YamlType = await parseYAMLFile(
-    path.join(pwd, filename)
+    path.join(pwd, filename),
   );
   const yc = Object.assign(
     {
-      var: {},
+      variables: {},
     },
-    yamlFileContent
+    yamlFileContent,
   );
   const {
     isValid: isValidYAMLFile,
@@ -156,9 +157,12 @@ export const processor = async ({
     content: yamlFileContent,
   });
   if (isValidYAMLFile) {
-    yc.var = { ...yc.var, pwd: path.join(pwd, yc.var.pwd || "/") };
+    yc.variables = {
+      ...yc.variables,
+      pwd: path.join(pwd, yc.variables.pwd || "/"),
+    };
     return {
-      output: await jobProcessor(yc.jobs, yc.var),
+      output: await jobProcessor(yc.jobs, yc.variables),
       error: null,
     };
   } else {

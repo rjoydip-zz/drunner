@@ -1,6 +1,6 @@
 name: Test runner
 
-var:
+variables:
   hello: world
   pwd: /test
 
@@ -34,6 +34,16 @@ jobs:
         description: Run example sh file
         run: sh  ./echo.sh
 
+  job3:
+    steps:
       - name: Deno version
         description: Run example sh file
         run: deno --version
+      
+      - name: Node.js version
+        description: Run example sh file
+        run: node --version
+
+      - name: Golang version
+        description: Run example sh file
+        run: go version
