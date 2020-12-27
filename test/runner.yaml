@@ -3,6 +3,9 @@ name: Test runner
 variables:
   hello: world
   pwd: /test
+  # output:
+  #   table: true
+  #   prefix: name
 
 jobs:
   job1:
@@ -30,20 +33,20 @@ jobs:
           echo "Deploy version $version"
           echo "multiline"
 
-      - name: Echo
+      - name: Echo sh
         description: Run example sh file
-        run: sh  ./echo.sh
+        # run: sh  ./echo.sh
 
   job3:
     steps:
       - name: Deno version
-        description: Run example sh file
+        description: Deno version desc
         run: deno --version
       
       - name: Node.js version
-        description: Run example sh file
+        description: Node.js version desc
         run: node --version
 
       - name: Golang version
-        description: Run example sh file
+        description: Golang version desc
         run: go version

@@ -1,10 +1,11 @@
-import { parseYaml, path } from "./deps.ts";
+import { parseYaml, path, AsciiTable, isString, isNull } from "./deps.ts";
 
 type StepType = {
   name: string;
   description?: string;
   with?: { [x: string]: string };
   run?: string;
+  [x: string]: string | object | null | undefined;
 };
 
 type JobType = {
@@ -13,9 +14,16 @@ type JobType = {
   };
 };
 
+type OutputVars = {
+  table: boolean;
+  prefix: string;
+  title?: string;
+};
+
 type Variables = {
-  [x: string]: string;
+  [x: string]: string | object;
   pwd: string;
+  output: OutputVars;
 };
 
 type YamlType = {
@@ -58,61 +66,51 @@ const exec = async (cmd: string | string[] | ExecOptions) => {
     process.close();
     throw new Error(
       removeTrailingLineBreak(decoder.decode(await process.stderrOutput())) ||
-        "exec: failed to execute command",
+        "exec: failed to execute command"
     );
   }
 
   return removeTrailingLineBreak(decoder.decode(await process.output()));
 };
 
+// Pretty output
+const prettyOutput = ({
+  input,
+  globalVar,
+}: {
+  input:
+    | {
+        title: string;
+        data: string;
+      }[]
+    | string;
+  globalVar: Variables;
+}) => {
+  if (isString(input)) {
+    return input;
+  } else {
+    if (globalVar.output.table) {
+      const op = AsciiTable.fromJSON({
+        title: globalVar.output.title || "",
+        heading: [globalVar.output.prefix, "Value"],
+        rows: [
+          ...input.map((i) => [
+            i.title.trim().toString(),
+            i.data.trim().toString(),
+          ]),
+        ],
+      });
+      return op.toString();
+    } else {
+      return input.map((i) => i.title.trim() + ": " + i.data.trim()).join("\n");
+    }
+  }
+};
+
 // Parse YAML file
 const parseYAMLFile = async (filePath: string) => {
   const yamlFile = await Deno.readFile(filePath);
-  return <YamlType> await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
-};
-
-// Processors
-const stepsProcessor = async (steps: StepType[] = [], globalVar: Variables) => {
-  return await Promise.all([
-    ...steps.map(async (step: StepType) => {
-      return step.run?.toString() === undefined
-        ? Promise.resolve([""])
-        : Promise.all([
-          ...(await step.run
-            ?.toString()
-            .split("\n")
-            .filter((i) => !!i)
-            .map(async (run: string) => {
-              const executedRes = await exec(
-                run
-                  .toString()
-                  .replace(
-                    /(\$\w+)/g,
-                    (match: string) => ({ ...step.with, ...globalVar }[
-                      match.slice(1, match.length)
-                    ].toString()),
-                  )
-                  .replace(
-                    /(.\/|..\/)+(\w+\.\w+)/g,
-                    (match: string) =>
-                      ` ${path.join(globalVar.pwd, match.trim())}`,
-                  )
-                  .replace(/\s+/, " "),
-              );
-              return executedRes.concat("\n");
-            })),
-        ]);
-    }),
-  ]);
-};
-
-// Job processor
-const jobProcessor = async (jobs: JobType = {}, globalVar: Variables) => {
-  const jobOutput = [];
-  for (const jobName of Object.keys(jobs)) {
-    jobOutput.push(await stepsProcessor(jobs[jobName].steps, globalVar));
-  }
-  return jobOutput.flat(Infinity).join("").trim(); // triming last "\n"
+  return <YamlType>await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
 };
 
 // Validate YAML file
@@ -130,26 +128,76 @@ const validateYAMLFile = ({
   return { isValid: true, error: null };
 };
 
+// Processors
+const stepsProcessor = async (steps: StepType[] = [], globalVar: Variables) => {
+  const index: string = globalVar.output.prefix;
+  return await Promise.all([
+    ...steps.map(async (step: StepType) => {
+      return step.run?.toString() === undefined
+        ? {
+            title: step[index],
+            data: "",
+          }
+        : Promise.all([
+            ...(await step.run
+              ?.toString()
+              .split("\n")
+              .filter((i) => !!i)
+              .map(async (run: string) => {
+                const executedRes = await exec(
+                  run
+                    .toString()
+                    .replace(/(\$\w+)/g, (match: string) =>
+                      ({ ...step.with, ...globalVar }[
+                        match.slice(1, match.length)
+                      ].toString())
+                    )
+                    .replace(
+                      /(.\/|..\/)+(\w+\.\w+)/g,
+                      (match: string) =>
+                        ` ${path.join(globalVar.pwd, match.trim())}`
+                    )
+                    .replace(/\s+/, " ")
+                );
+                return {
+                  title: step[index],
+                  data: executedRes.concat("\n"),
+                };
+              })),
+          ]);
+    }),
+  ]);
+};
+
+// Job processor
+const jobProcessor = async (jobs: JobType = {}, globalVar: Variables) => {
+  const jobOutput = [];
+  for (const jobName of Object.keys(jobs)) {
+    jobOutput.push(await stepsProcessor(jobs[jobName].steps, globalVar));
+  }
+  return jobOutput.flat(Infinity).filter((i) => !isNull(i));
+};
+
 // Processor
 export const processor = async ({
   pwd,
   filename,
+  output,
 }: {
   pwd: string;
   filename: string;
+  output: {
+    table: boolean;
+    prefix: string;
+  };
 }): Promise<{
   output: string | null;
   error: string | null;
 }> => {
   const yamlFileContent: YamlType = await parseYAMLFile(
-    path.join(pwd, filename),
+    path.join(pwd, filename)
   );
-  const yc = Object.assign(
-    {
-      variables: {},
-    },
-    yamlFileContent,
-  );
+  const yc = Object.assign({}, yamlFileContent);
   const {
     isValid: isValidYAMLFile,
     error: yamlErrorMessage,
@@ -157,12 +205,24 @@ export const processor = async ({
     content: yamlFileContent,
   });
   if (isValidYAMLFile) {
+    yc.name = yc.name || "";
     yc.variables = {
       ...yc.variables,
-      pwd: path.join(pwd, yc.variables.pwd || "/"),
+      output: {
+        prefix: output.prefix || yc.variables?.output?.prefix || "name",
+        table: !!(output.table || yc.variables?.output?.table),
+        title: yc.name || "",
+      },
+      pwd: path.join(pwd, yc.variables?.pwd || "/"),
     };
     return {
-      output: await jobProcessor(yc.jobs, yc.variables),
+      output: prettyOutput({
+        input:
+          <{ data: string; title: string }[]>(
+            await jobProcessor(yc.jobs, yc.variables)
+          ) || "",
+        globalVar: yc.variables,
+      }),
       error: null,
     };
   } else {
