@@ -3,24 +3,30 @@ on:
   push:
     branches:
       - master
+    tags:
+      - 'v*'
+      
 jobs:
   release:
     name: Release
     runs-on: ubuntu-18.04
-    if: |
-      "contains(github.event.head_commit.message, '[release]')" ||
-      "contains(github.event.head_commit.message, '[release]:')" ||
-      "contains(github.event.head_commit.message, 'release')" ||
-      "contains(github.event.head_commit.message, 'release:')"
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+      - name: Setup Deno environment
+        uses: denolib/setup-deno@v2.3.0
+        with:
+          deno-version: v1.x
+      - name: Lint
+        run: deno lint --unstable
+      - name: Test
+        run: deno test
       - name: Release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          release_name: Release - ${{ github.ref }}
           draft: false
           prerelease: false
