@@ -10,8 +10,7 @@ const main = async () => {
   try {
     const { output: procOutput, error: procError } = await processor({
       pwd: _cwd,
-      filename:
-        _args.i ||
+      filename: _args.i ||
         _args.input ||
         _args._.filter((inp: string | number) =>
           inp.toString().endsWith(".yaml")
