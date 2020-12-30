@@ -15,7 +15,7 @@ type JobType = {
 };
 
 type OutputVars = {
-  table: boolean;
+  pretty: boolean;
   prefix: string;
   title?: string;
 };
@@ -66,7 +66,7 @@ const exec = async (cmd: string | string[] | ExecOptions) => {
     process.close();
     throw new Error(
       removeTrailingLineBreak(decoder.decode(await process.stderrOutput())) ||
-        "exec: failed to execute command",
+        "exec: failed to execute command"
     );
   }
 
@@ -80,41 +80,19 @@ const prettyOutput = ({
 }: {
   input:
     | {
-      title: string;
-      data: string;
-    }[]
+        title: string;
+        data: string;
+      }[]
     | string;
   globalVar: Variables;
 }) => {
   if (isString(input)) {
     return input;
   } else {
-    if (globalVar.output.table) {
-      console.log(
-        input
-          .map((i) => {
-            return i.data.split("\n").length > 2
-              ? {
-                ...i,
-                data: i.data.split("\n"),
-              }
-              : i;
-          }),
-      );
-      const table = AsciiTable.fromJSON({
-        title: globalVar.output.title || "",
-        heading: [globalVar.output.prefix, "Value"],
-        rows: [
-          ...input
-            .map((i) => {
-              return i;
-            })
-            .map((i) => [i.title.trim().toString(), i.data.trim().toString()]),
-        ],
-      });
-      return table.toString();
-    } else {
+    if (globalVar.output.pretty && globalVar.output.prefix !== "") {
       return input.map((i) => i.title.trim() + ": " + i.data.trim()).join("\n");
+    } else {
+      return input.map((i) => i.data.trim()).join("\n");
     }
   }
 };
@@ -122,7 +100,7 @@ const prettyOutput = ({
 // Parse YAML file
 const parseYAMLFile = async (filePath: string) => {
   const yamlFile = await Deno.readFile(filePath);
-  return <YamlType> await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
+  return <YamlType>await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
 };
 
 // Validate YAML file
@@ -147,37 +125,36 @@ const stepsProcessor = async (steps: StepType[] = [], globalVar: Variables) => {
     ...steps.map(async (step: StepType) => {
       return step.run?.trim().toString() === undefined
         ? {
-          title: step[index],
-          data: "",
-        }
+            title: step[index],
+            data: "",
+          }
         : Promise.all([
-          ...(await step.run
-            ?.toString()
-            .split("\n")
-            .filter((i) => !!i)
-            .map(async (run: string) => {
-              const executedRes = await exec(
-                run
-                  .toString()
-                  .replace(
-                    /(\$\w+)/g,
-                    (match: string) => ({ ...step.with, ...globalVar }[
-                      match.slice(1, match.length)
-                    ].toString()),
-                  )
-                  .replace(
-                    /(.\/|..\/)+(\w+\.\w+)/g,
-                    (match: string) =>
-                      ` ${path.join(globalVar.pwd, match.trim())}`,
-                  )
-                  .replace(/\s+/, " "),
-              );
-              return {
-                title: step[index],
-                data: executedRes.concat("\n"),
-              };
-            })),
-        ]);
+            ...(await step.run
+              ?.toString()
+              .split("\n")
+              .filter((i) => !!i)
+              .map(async (run: string) => {
+                const executedRes = await exec(
+                  run
+                    .toString()
+                    .replace(/(\$\w+)/g, (match: string) =>
+                      ({ ...step.with, ...globalVar }[
+                        match.slice(1, match.length)
+                      ].toString())
+                    )
+                    .replace(
+                      /(.\/|..\/)+(\w+\.\w+)/g,
+                      (match: string) =>
+                        ` ${path.join(globalVar.pwd, match.trim())}`
+                    )
+                    .replace(/\s+/, " ")
+                );
+                return {
+                  title: step[index],
+                  data: executedRes.concat("\n"),
+                };
+              })),
+          ]);
     }),
   ]);
 };
@@ -199,16 +176,13 @@ export const processor = async ({
 }: {
   pwd: string;
   filename: string;
-  output: {
-    table: boolean;
-    prefix: string;
-  };
+  output: OutputVars;
 }): Promise<{
   output: string | null;
   error: string | null;
 }> => {
   const yamlFileContent: YamlType = await parseYAMLFile(
-    path.join(pwd, filename),
+    path.join(pwd, filename)
   );
   const yc = Object.assign({}, yamlFileContent);
   const {
@@ -223,16 +197,17 @@ export const processor = async ({
       ...yc.variables,
       output: {
         prefix: output.prefix || yc.variables?.output?.prefix || "name",
-        table: !!(output.table || yc.variables?.output?.table),
+        pretty: !!(output.pretty || yc.variables?.output?.pretty),
         title: yc.name || "",
       },
       pwd: path.join(pwd, yc.variables?.pwd || "/"),
     };
     return {
       output: prettyOutput({
-        input: <{ data: string; title: string }[]> (
-          await jobProcessor(yc.jobs, yc.variables)
-        ) || "",
+        input:
+          <{ data: string; title: string }[]>(
+            await jobProcessor(yc.jobs, yc.variables)
+          ) || "",
         globalVar: yc.variables,
       }),
       error: null,

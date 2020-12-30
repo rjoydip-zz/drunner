@@ -3,9 +3,9 @@ name: Test runner
 variables:
   hello: world
   pwd: /test
-  # output:
-  #   table: true
-  #   prefix: name
+  output:
+    # pretty: true
+    # prefix: description
 
 jobs:
   job1:

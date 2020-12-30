@@ -14,7 +14,7 @@ const main = async () => {
         _args._.filter((inp) => inp.toString().endsWith(".yaml")).pop() ||
         "runner.yaml",
       output: {
-        table: _args.format === "table",
+        pretty: _args.pretty,
         prefix: isUndefined(_args.prefix) ? "" : _args.prefix,
       },
     });
