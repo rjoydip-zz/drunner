@@ -1,4 +1,7 @@
-# drunner ![Build status](https://github.com/rjoydip/drunner/workflows/build/badge.svg)
+# drunner 
+
+![Drunner CI](https://github.com/rjoydip/drunner/workflows/Drunner%20CI/badge.svg)
+![Drunner Release CI](https://github.com/rjoydip/drunner/workflows/Drunner%20Release%20CI/badge.svg)
 
 > Deno task runner for automation pipelines script sequential task workflow steps in yaml conditional execution, loops, error handling & retries.
 
