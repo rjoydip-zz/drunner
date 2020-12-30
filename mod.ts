@@ -1,12 +1,11 @@
-import { parseYaml, path, AsciiTable, isString, isNull } from "./deps.ts";
-import * as ink from "https://deno.land/x/ink/mod.ts";
+import { AsciiTable, isNull, isString, parseYaml, path } from "./deps.ts";
 
 type StepType = {
   name: string;
   description?: string;
   with?: { [x: string]: string };
   run?: string;
-  [x: string]: string | object | null | undefined;
+  [x: string]: string | Record<string, unknown> | null | undefined;
 };
 
 type JobType = {
@@ -22,7 +21,7 @@ type OutputVars = {
 };
 
 type Variables = {
-  [x: string]: string | object;
+  [x: string]: string | Record<string, unknown>;
   pwd: string;
   output: OutputVars;
 };
@@ -67,7 +66,7 @@ const exec = async (cmd: string | string[] | ExecOptions) => {
     process.close();
     throw new Error(
       removeTrailingLineBreak(decoder.decode(await process.stderrOutput())) ||
-        "exec: failed to execute command"
+        "exec: failed to execute command",
     );
   }
 
@@ -81,9 +80,9 @@ const prettyOutput = ({
 }: {
   input:
     | {
-        title: string;
-        data: string;
-      }[]
+      title: string;
+      data: string;
+    }[]
     | string;
   globalVar: Variables;
 }) => {
@@ -96,11 +95,11 @@ const prettyOutput = ({
           .map((i) => {
             return i.data.split("\n").length > 2
               ? {
-                  ...i,
-                  data: i.data.split("\n"),
-                }
+                ...i,
+                data: i.data.split("\n"),
+              }
               : i;
-          })
+          }),
       );
       const table = AsciiTable.fromJSON({
         title: globalVar.output.title || "",
@@ -123,7 +122,7 @@ const prettyOutput = ({
 // Parse YAML file
 const parseYAMLFile = async (filePath: string) => {
   const yamlFile = await Deno.readFile(filePath);
-  return <YamlType>await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
+  return <YamlType> await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
 };
 
 // Validate YAML file
@@ -148,36 +147,37 @@ const stepsProcessor = async (steps: StepType[] = [], globalVar: Variables) => {
     ...steps.map(async (step: StepType) => {
       return step.run?.trim().toString() === undefined
         ? {
-            title: step[index],
-            data: "",
-          }
+          title: step[index],
+          data: "",
+        }
         : Promise.all([
-            ...(await step.run
-              ?.toString()
-              .split("\n")
-              .filter((i) => !!i)
-              .map(async (run: string) => {
-                const executedRes = await exec(
-                  run
-                    .toString()
-                    .replace(/(\$\w+)/g, (match: string) =>
-                      ({ ...step.with, ...globalVar }[
-                        match.slice(1, match.length)
-                      ].toString())
-                    )
-                    .replace(
-                      /(.\/|..\/)+(\w+\.\w+)/g,
-                      (match: string) =>
-                        ` ${path.join(globalVar.pwd, match.trim())}`
-                    )
-                    .replace(/\s+/, " ")
-                );
-                return {
-                  title: step[index],
-                  data: executedRes.concat("\n"),
-                };
-              })),
-          ]);
+          ...(await step.run
+            ?.toString()
+            .split("\n")
+            .filter((i) => !!i)
+            .map(async (run: string) => {
+              const executedRes = await exec(
+                run
+                  .toString()
+                  .replace(
+                    /(\$\w+)/g,
+                    (match: string) => ({ ...step.with, ...globalVar }[
+                      match.slice(1, match.length)
+                    ].toString()),
+                  )
+                  .replace(
+                    /(.\/|..\/)+(\w+\.\w+)/g,
+                    (match: string) =>
+                      ` ${path.join(globalVar.pwd, match.trim())}`,
+                  )
+                  .replace(/\s+/, " "),
+              );
+              return {
+                title: step[index],
+                data: executedRes.concat("\n"),
+              };
+            })),
+        ]);
     }),
   ]);
 };
@@ -208,7 +208,7 @@ export const processor = async ({
   error: string | null;
 }> => {
   const yamlFileContent: YamlType = await parseYAMLFile(
-    path.join(pwd, filename)
+    path.join(pwd, filename),
   );
   const yc = Object.assign({}, yamlFileContent);
   const {
@@ -230,10 +230,9 @@ export const processor = async ({
     };
     return {
       output: prettyOutput({
-        input:
-          <{ data: string; title: string }[]>(
-            await jobProcessor(yc.jobs, yc.variables)
-          ) || "",
+        input: <{ data: string; title: string }[]> (
+          await jobProcessor(yc.jobs, yc.variables)
+        ) || "",
         globalVar: yc.variables,
       }),
       error: null,
