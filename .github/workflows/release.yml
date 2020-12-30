@@ -1,0 +1,26 @@
+name: Drunner Release CI
+on:
+  push:
+    branches:
+      - master
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-18.04
+    if: |
+      "contains(github.event.head_commit.message, '[release]')" ||
+      "contains(github.event.head_commit.message, '[release]:')" ||
+      "contains(github.event.head_commit.message, 'release')" ||
+      "contains(github.event.head_commit.message, 'release:')"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
