@@ -35,7 +35,7 @@ jobs:
 
       - name: Echo sh
         description: Run example sh file
-        # run: sh  ./echo.sh
+        run: sh  ./echo.sh
 
   job3:
     steps:

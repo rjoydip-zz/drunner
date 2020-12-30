@@ -1,7 +1,7 @@
 // Standard library
 export { parse } from "https://deno.land/std@0.63.0/flags/mod.ts";
 export * as path from "https://deno.land/std@0.63.0/path/mod.ts";
-export { red } from "https://deno.land/std@0.63.0/fmt/colors.ts";
+export * as colors from "https://deno.land/std@0.63.0/fmt/colors.ts";
 export { parse as parseYaml } from "https://deno.land/std@0.63.0/encoding/yaml.ts";
 export { isString, isNull, isUndefined } from "https://deno.land/std@0.63.0/encoding/_yaml/utils.ts"
 // 3rd party library

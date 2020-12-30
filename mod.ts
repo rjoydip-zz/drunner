@@ -1,4 +1,5 @@
 import { parseYaml, path, AsciiTable, isString, isNull } from "./deps.ts";
+import * as ink from "https://deno.land/x/ink/mod.ts";
 
 type StepType = {
   name: string;
@@ -90,17 +91,29 @@ const prettyOutput = ({
     return input;
   } else {
     if (globalVar.output.table) {
-      const op = AsciiTable.fromJSON({
+      console.log(
+        input
+          .map((i) => {
+            return i.data.split("\n").length > 2
+              ? {
+                  ...i,
+                  data: i.data.split("\n"),
+                }
+              : i;
+          })
+      );
+      const table = AsciiTable.fromJSON({
         title: globalVar.output.title || "",
         heading: [globalVar.output.prefix, "Value"],
         rows: [
-          ...input.map((i) => [
-            i.title.trim().toString(),
-            i.data.trim().toString(),
-          ]),
+          ...input
+            .map((i) => {
+              return i;
+            })
+            .map((i) => [i.title.trim().toString(), i.data.trim().toString()]),
         ],
       });
-      return op.toString();
+      return table.toString();
     } else {
       return input.map((i) => i.title.trim() + ": " + i.data.trim()).join("\n");
     }
@@ -133,7 +146,7 @@ const stepsProcessor = async (steps: StepType[] = [], globalVar: Variables) => {
   const index: string = globalVar.output.prefix;
   return await Promise.all([
     ...steps.map(async (step: StepType) => {
-      return step.run?.toString() === undefined
+      return step.run?.trim().toString() === undefined
         ? {
             title: step[index],
             data: "",

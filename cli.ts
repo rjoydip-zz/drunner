@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno
 
-import { parse, red, isUndefined } from "./deps.ts";
+import { parse, colors, isUndefined } from "./deps.ts";
 import { processor } from "./mod.ts";
 
 const main = async () => {
@@ -16,7 +16,7 @@ const main = async () => {
         "runner.yaml",
       output: {
         table: _args.format === "table",
-        prefix: isUndefined(_args.prefix) ? "": _args.prefix,
+        prefix: isUndefined(_args.prefix) ? "" : _args.prefix,
       },
     });
 
@@ -26,7 +26,7 @@ const main = async () => {
     }
     if (procError) {
       console.log();
-      console.log(red(procError));
+      console.log(colors.red(procError));
     }
 
     Deno.exit();

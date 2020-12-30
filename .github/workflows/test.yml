@@ -1,0 +1,17 @@
+name: Drunner CI
+
+on: ["push", "pull_request"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Setup Deno environment
+        uses: denolib/setup-deno@v2.3.0
+        with:
+          deno-version: v1.x
+      - name: Lint
+        run: deno lint --unstable
+      - name: Test
+        run: deno test
