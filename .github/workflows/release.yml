@@ -21,7 +21,7 @@ jobs:
         run: deno test
       - name: Build project
         run: |
-          zip --junk-paths drunner-artifact **/*.ts test/ README.md
+          zip --junk-paths drunner-artifact .
       - name: Release
         id: create_release
         uses: actions/create-release@v1
