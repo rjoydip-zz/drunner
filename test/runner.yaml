@@ -4,8 +4,9 @@ variables:
   hello: world
   pwd: /test
   output:
+    colored: true
     # pretty: true
-    # prefix: description
+    prefix: name
 
 jobs:
   job1:
@@ -35,8 +36,13 @@ jobs:
 
       - name: Echo sh
         description: Run example sh file
-        run: sh  ./echo.sh
+        # run: sh  ./echo.sh
 
+      - name: No return
+        description: Golang version desc
+        run: 
+          script: echo "No return"
+          return: false
   job3:
     steps:
       - name: Deno version

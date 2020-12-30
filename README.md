@@ -49,7 +49,12 @@ jobs:
       - name: Echo sh
         description: Run example sh file
         run: sh  ./echo.sh
-
+        
+      - name: No return
+        description: Golang version desc
+        run: 
+          script: echo "No return"
+          return: false
   job3:
     steps:
       - name: Deno version
@@ -70,5 +75,5 @@ drunner runner.yaml
 ## Run locally
 
 ```sh
-deno run --allow-run --allow-read cli.ts test/runner.yaml
+deno run --import-map=import_map.json --allow-run --allow-read --unstable cli.ts test/runner.yaml
 ```
