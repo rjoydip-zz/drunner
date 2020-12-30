@@ -1,8 +1,6 @@
 name: Drunner Release CI
 on:
   push:
-    branches:
-      - master
     tags:
       - 'v*'
 
