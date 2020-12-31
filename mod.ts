@@ -1,11 +1,20 @@
-import { AsciiTable, isNull, isString, parseYaml, path } from "./deps.ts";
+import { colors, parseYaml, path } from "./deps.ts";
+
+type Languages = "sh" | "cmd" | "js" | "go" | "php";
+
+type RunType = {
+  script: string;
+  lang: Languages;
+  return: boolean;
+  default: string | number | null;
+};
 
 type StepType = {
+  [x: string]: string | Record<string, unknown> | null | undefined;
   name: string;
   description?: string;
   with?: { [x: string]: string };
-  run?: string;
-  [x: string]: string | Record<string, unknown> | null | undefined;
+  run?: string | RunType;
 };
 
 type JobType = {
@@ -15,7 +24,8 @@ type JobType = {
 };
 
 type OutputVars = {
-  table: boolean;
+  colored: boolean;
+  pretty: boolean;
   prefix: string;
   title?: string;
 };
@@ -25,6 +35,8 @@ type Variables = {
   pwd: string;
   output: OutputVars;
 };
+
+type ProcessorIO = { output: string; title: string };
 
 type YamlType = {
   name: string | null;
@@ -40,17 +52,13 @@ const removeTrailingLineBreak = (str: string) => {
 };
 
 // Execute command
-const exec = async (cmd: string | string[] | ExecOptions) => {
-  let opts: Deno.RunOptions;
+const exec = async (cmd: string[] | ExecOptions) => {
+  let opts: Deno.RunOptions = {
+    cmd: [],
+  };
 
-  if (typeof cmd === "string") {
-    opts = {
-      cmd: cmd.split(" "),
-    };
-  } else if (Array.isArray(cmd)) {
-    opts = {
-      cmd,
-    };
+  if (Array.isArray(cmd)) {
+    opts.cmd = cmd;
   } else {
     opts = cmd;
   }
@@ -78,45 +86,18 @@ const prettyOutput = ({
   input,
   globalVar,
 }: {
-  input:
-    | {
-      title: string;
-      data: string;
-    }[]
-    | string;
+  input: ProcessorIO[];
   globalVar: Variables;
 }) => {
-  if (isString(input)) {
-    return input;
-  } else {
-    if (globalVar.output.table) {
-      console.log(
-        input
-          .map((i) => {
-            return i.data.split("\n").length > 2
-              ? {
-                ...i,
-                data: i.data.split("\n"),
-              }
-              : i;
-          }),
-      );
-      const table = AsciiTable.fromJSON({
-        title: globalVar.output.title || "",
-        heading: [globalVar.output.prefix, "Value"],
-        rows: [
-          ...input
-            .map((i) => {
-              return i;
-            })
-            .map((i) => [i.title.trim().toString(), i.data.trim().toString()]),
-        ],
-      });
-      return table.toString();
-    } else {
-      return input.map((i) => i.title.trim() + ": " + i.data.trim()).join("\n");
-    }
-  }
+  return input
+    .map((i) =>
+      globalVar.output.prefix
+        ? (globalVar.output.colored
+          ? colors.red(i.title.trim() + ": ")
+          : i.title.trim() + ": ") + i.output.trim()
+        : i.output.trim()
+    )
+    .join("\n");
 };
 
 // Parse YAML file
@@ -145,20 +126,20 @@ const stepsProcessor = async (steps: StepType[] = [], globalVar: Variables) => {
   const index: string = globalVar.output.prefix;
   return await Promise.all([
     ...steps.map(async (step: StepType) => {
-      return step.run?.trim().toString() === undefined
+      return step.run === undefined
         ? {
           title: step[index],
-          data: "",
+          output: "",
         }
         : Promise.all([
-          ...(await step.run
-            ?.toString()
+          ...(await (typeof step.run === "string"
+            ? step.run
+            : step.run?.script ?? "")
             .split("\n")
             .filter((i) => !!i)
             .map(async (run: string) => {
               const executedRes = await exec(
                 run
-                  .toString()
                   .replace(
                     /(\$\w+)/g,
                     (match: string) => ({ ...step.with, ...globalVar }[
@@ -170,11 +151,17 @@ const stepsProcessor = async (steps: StepType[] = [], globalVar: Variables) => {
                     (match: string) =>
                       ` ${path.join(globalVar.pwd, match.trim())}`,
                   )
-                  .replace(/\s+/, " "),
+                  .replace(/\s+/, " ")
+                  .split(" "),
               );
               return {
                 title: step[index],
-                data: executedRes.concat("\n"),
+                output: typeof step.run === "string" ||
+                    (typeof step.run?.script === "string" && !!step.run?.return)
+                  ? executedRes.concat("\n")
+                  : (step.run?.return === false || step.run?.return === null)
+                  ? ""
+                  : step.run?.return,
               };
             })),
         ]);
@@ -188,7 +175,7 @@ const jobProcessor = async (jobs: JobType = {}, globalVar: Variables) => {
   for (const jobName of Object.keys(jobs)) {
     jobOutput.push(await stepsProcessor(jobs[jobName].steps, globalVar));
   }
-  return jobOutput.flat(Infinity).filter((i) => !isNull(i));
+  return jobOutput.flat(Infinity).filter((i) => !!i);
 };
 
 // Processor
@@ -199,10 +186,7 @@ export const processor = async ({
 }: {
   pwd: string;
   filename: string;
-  output: {
-    table: boolean;
-    prefix: string;
-  };
+  output: OutputVars;
 }): Promise<{
   output: string | null;
   error: string | null;
@@ -222,17 +206,17 @@ export const processor = async ({
     yc.variables = {
       ...yc.variables,
       output: {
-        prefix: output.prefix || yc.variables?.output?.prefix || "name",
-        table: !!(output.table || yc.variables?.output?.table),
+        prefix: output.prefix || yc.variables?.output?.prefix || "",
+        pretty: !!(output.pretty || yc.variables?.output?.pretty),
+        colored: !!(output.colored || yc.variables?.output?.colored),
         title: yc.name || "",
       },
       pwd: path.join(pwd, yc.variables?.pwd || "/"),
     };
+
     return {
       output: prettyOutput({
-        input: <{ data: string; title: string }[]> (
-          await jobProcessor(yc.jobs, yc.variables)
-        ) || "",
+        input: <ProcessorIO[]> await jobProcessor(yc.jobs, yc.variables) || "",
         globalVar: yc.variables,
       }),
       error: null,
