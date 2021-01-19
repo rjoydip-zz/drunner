@@ -8,8 +8,12 @@
 ## Install
 
 ```sh
-deno install -f --name drunner https://raw.githubusercontent.com/rjoydip/drunner/mod.ts
+deno install -f --name drunner https://raw.githubusercontent.com/rjoydip/drunner/cli.ts
 ```
+
+## TODO
+
+- List down cli arguments 
 
 ## Example
 
