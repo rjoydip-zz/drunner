@@ -1,10 +1,7 @@
 import { colors, parseYaml, path } from "./deps.ts";
 
-type Languages = "sh" | "cmd" | "js" | "go" | "php";
-
 type RunType = {
   script: string;
-  lang: Languages;
   return: boolean;
   default: string | number | null;
 };
@@ -24,7 +21,7 @@ type JobType = {
 };
 
 type OutputVars = {
-  colored: boolean;
+  noColor: boolean;
   pretty: boolean;
   prefix: string;
   title?: string;
@@ -74,36 +71,17 @@ const exec = async (cmd: string[] | ExecOptions) => {
     process.close();
     throw new Error(
       removeTrailingLineBreak(decoder.decode(await process.stderrOutput())) ||
-        "exec: failed to execute command",
+        "exec: failed to execute command"
     );
   }
 
   return removeTrailingLineBreak(decoder.decode(await process.output()));
 };
 
-// Pretty output
-const prettyOutput = ({
-  input,
-  globalVar,
-}: {
-  input: ProcessorIO[];
-  globalVar: Variables;
-}) => {
-  return input
-    .map((i) =>
-      globalVar.output.prefix
-        ? (globalVar.output.colored
-          ? colors.red(i.title.trim() + ": ")
-          : i.title.trim() + ": ") + i.output.trim()
-        : i.output.trim()
-    )
-    .join("\n");
-};
-
 // Parse YAML file
 const parseYAMLFile = async (filePath: string) => {
   const yamlFile = await Deno.readFile(filePath);
-  return <YamlType> await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
+  return <YamlType>await parseYaml(new TextDecoder("utf-8").decode(yamlFile));
 };
 
 // Validate YAML file
@@ -128,43 +106,44 @@ const stepsProcessor = async (steps: StepType[] = [], globalVar: Variables) => {
     ...steps.map(async (step: StepType) => {
       return step.run === undefined
         ? {
-          title: step[index],
-          output: "",
-        }
+            title: step[index],
+            output: "",
+          }
         : Promise.all([
-          ...(await (typeof step.run === "string"
-            ? step.run
-            : step.run?.script ?? "")
-            .split("\n")
-            .filter((i) => !!i)
-            .map(async (run: string) => {
-              const executedRes = await exec(
-                run
-                  .replace(
-                    /(\$\w+)/g,
-                    (match: string) => ({ ...step.with, ...globalVar }[
-                      match.slice(1, match.length)
-                    ].toString()),
-                  )
-                  .replace(
-                    /(.\/|..\/)+(\w+\.\w+)/g,
-                    (match: string) =>
-                      ` ${path.join(globalVar.pwd, match.trim())}`,
-                  )
-                  .replace(/\s+/, " ")
-                  .split(" "),
-              );
-              return {
-                title: step[index],
-                output: typeof step.run === "string" ||
+            ...(await (typeof step.run === "string"
+              ? step.run
+              : step.run?.script ?? ""
+            )
+              .split("\n")
+              .filter((i) => !!i)
+              .map(async (run: string) => {
+                const executedRes = await exec(
+                  run
+                    .replace(/(\$\w+)/g, (match: string) =>
+                      ({ ...step.with, ...globalVar }[
+                        match.slice(1, match.length)
+                      ].toString())
+                    )
+                    .replace(
+                      /(.\/|..\/)+(\w+\.\w+)/g,
+                      (match: string) =>
+                        ` ${path.join(globalVar.pwd, match.trim())}`
+                    )
+                    .replace(/\s+/, " ")
+                    .split(" ")
+                );
+                return {
+                  title: step[index],
+                  output:
+                    typeof step.run === "string" ||
                     (typeof step.run?.script === "string" && !!step.run?.return)
-                  ? executedRes.concat("\n")
-                  : (step.run?.return === false || step.run?.return === null)
-                  ? ""
-                  : step.run?.return,
-              };
-            })),
-        ]);
+                      ? executedRes.concat("\n")
+                      : step.run?.return === false || step.run?.return === null
+                      ? ""
+                      : step.run?.return,
+                };
+              })),
+          ]);
     }),
   ]);
 };
@@ -192,7 +171,7 @@ export const processor = async ({
   error: string | null;
 }> => {
   const yamlFileContent: YamlType = await parseYAMLFile(
-    path.join(pwd, filename),
+    path.join(pwd, filename)
   );
   const yc = Object.assign({}, yamlFileContent);
   const {
@@ -208,17 +187,24 @@ export const processor = async ({
       output: {
         prefix: output.prefix || yc.variables?.output?.prefix || "",
         pretty: !!(output.pretty || yc.variables?.output?.pretty),
-        colored: !!(output.colored || yc.variables?.output?.colored),
+        noColor: !!(output.noColor || yc.variables?.output?.noColor),
         title: yc.name || "",
       },
       pwd: path.join(pwd, yc.variables?.pwd || "/"),
     };
 
     return {
-      output: prettyOutput({
-        input: <ProcessorIO[]> await jobProcessor(yc.jobs, yc.variables) || "",
-        globalVar: yc.variables,
-      }),
+      output: (<ProcessorIO[]>await jobProcessor(yc.jobs, yc.variables) || "")
+        .map((i) =>
+          yc.variables?.output.pretty
+            ? yc.variables?.output.prefix
+              ? (!yc.variables?.output.noColor
+                  ? colors.red(i.title.trim() + ": ")
+                  : i.title.trim() + ": ") + i.output.trim()
+              : i.output.trim()
+            : i.output.trim()
+        )
+        .join("\n"),
       error: null,
     };
   } else {

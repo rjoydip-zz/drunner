@@ -8,12 +8,26 @@
 ## Install
 
 ```sh
-deno install -f --name drunner https://raw.githubusercontent.com/rjoydip/drunner/cli.ts
+deno install --allow-run --allow-read -f -n drunner https://raw.githubusercontent.com/rjoydip/drunner/master/cli.ts
 ```
 
-## TODO
+## Usage CLI
 
-- List down cli arguments 
+```sh
+drunner runner.yaml
+```
+
+## Run locally
+
+```sh
+deno run --allow-run --allow-read --unstable cli.ts test/runner.yaml
+```
+
+## Arguments
+
+  - **`--noColor` - (Default: `true`)** - No colored output
+  - **`--pretty` - (Default: `false`)** - No format
+  - **`--prefix` - (Default: `name`)** - Steps name will display with `--pretty`
 
 ## Example
 
@@ -68,16 +82,4 @@ jobs:
       - name: Node.js version
         description: Node.js version desc
         run: node --version
-```
-
-## Usage CLI
-
-```sh
-drunner runner.yaml
-```
-
-## Run locally
-
-```sh
-deno run --import-map=import_map.json --allow-run --allow-read --unstable cli.ts test/runner.yaml
 ```

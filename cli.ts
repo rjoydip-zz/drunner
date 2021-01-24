@@ -18,7 +18,7 @@ const main = async () => {
         "runner.yaml",
       output: {
         pretty: _args.pretty,
-        colored: _args.colored,
+        noColor: _args.noColor,
         prefix: _args.prefix,
       },
     });
